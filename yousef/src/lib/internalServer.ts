@@ -2,18 +2,20 @@
 
 import {Peer} from "peerjs";
 import type {DataConnection} from "peerjs";
-import {lobbyData, messages} from "./clientSide";
+import {gameData, lobbyData, messages, updateUIForRoom} from "./clientSide";
 import type {
+    Card,
     ChatMessageData,
     ClientMessageData,
     ClientNameSetData,
     CommData,
-    LobbyData,
-    PlayerReadyData
+    LobbyData, OpponentRoundData,
+    PlayerReadyData, RoomGameInfo
 } from "./common";
-import {isCommData} from "./common";
-import {hostName} from "./host";
+import {isCommData, makeDeck} from "./common";
+import {host, hostName} from "./host";
 import {get, writable} from "svelte/store";
+import Lobby from "./Lobby.svelte";
 
 export let isServer: boolean = false;
 let peer: Peer | undefined;
@@ -55,6 +57,7 @@ export async function openConn(conn: DataConnection) {
     });
 }
 
+let roomState: RoomState = RoomState.Lobby;
 
 enum RoomState {
     Lobby,
@@ -90,12 +93,16 @@ export function resetLobbyState() {
     }
 }
 
-type User = UserMgr | { name: string };
+type User = { name: string, isHost: boolean };
 
 class UserMgr {
     conn: DataConnection;
     curState: UserState = UserState.NA;
     name: string | undefined;
+
+    get isHost() {
+        return false;
+    }
 
     constructor(conn: DataConnection) {
         this.conn = conn;
@@ -139,7 +146,11 @@ class UserMgr {
                     lobbyState[this.name] = !lobbyState[this.name];
                     await lobbyDataUpdate();
                     break;
+                case 'card_select':
 
+                    break;
+                case 'draw_select':
+                    break;
             }
         });
     }
@@ -161,6 +172,10 @@ export async function sendChatMsg(chatMsgData: ChatMessageData) {
     messages.set([...get(messages), chatMsgData]);
     await sendToAllOthers(chatMsgData);
     console.log(`transmitted msg ${chatMsgData.sender}: ${chatMsgData.data}`)
+}
+
+export async function sendGameMsg(info: string) {
+    return sendChatMsg({ '_type': 'in_msg', sender: undefined, data: info })
 }
 
 export async function lobbyDataUpdate() {
@@ -223,3 +238,123 @@ function defaultSettings(): Settings {
     };
 }
 
+export type ScoreTracker = { [username: string]: number };
+
+class GameData {
+    scores: ScoreTracker;
+    players: User[];
+    roundData: ScoreTracker[];
+    round: Round | undefined;
+    settings: Settings;
+    prevWinner: number = 0;
+
+    constructor() {
+        this.settings = roomSettings;
+        this.roundData = [];
+        this.players = [host, ...otherUsers as User];
+        this.scores = {};
+        for (let player of this.players) {
+            this.scores[player.name] = 0;
+        }
+        console.log(`created game! data: ${this.settings}`);
+    }
+
+    async startNewRound() {
+        this.round = new Round();
+        await this.round.start();
+    }
+}
+
+class Round {
+    deck: Card[];
+    pile: Card[];
+    turnCount: number;
+    playerHands: { [username: string]: Card[] }
+
+    get roundNumber(): number {
+        return Math.floor(this.turnCount / game.players.length) + 1;
+    }
+
+    constructor() {
+        this.deck = makeDeck(game.settings.deckCount, game.settings.useJokers);
+        this.pile = [];
+        this.playerHands = {};
+        this.turnCount = 0;
+        for (let player of game.players) {
+            this.playerHands[player.name] = [];
+        }
+    }
+
+    async start() {
+        for (let i = 0; i < game.settings.cardsPerPlayer; i++) {
+            for (let playerHandsKey in this.playerHands) {
+                this.playerHands[playerHandsKey].push(this.drawFromDeck());
+            }
+        }
+        await this.sendUpdates();
+        await sendGameMsg(`round ${game.roundData.length + 1} is starting!`)
+    }
+
+    drawFromDeck(): Card {
+        if (this.deck.length === 0) {
+            this.deck.push(...this.pile);
+            this.pile = [];
+        }
+        return this.deck.pop();
+    }
+
+    get curPlayer(): User {
+        // ensure that we fit inside the list
+        return game.players[(this.turnCount + game.prevWinner) % game.players.length];
+    }
+
+    mapToIds(cards: Array<Card>): number[] {
+        return cards.map(card => card.id);
+    }
+
+    async sendUpdates() {
+        let globalOppRD: OpponentRoundData[] = [];
+        for (let player of game.players) {
+            globalOppRD.push({
+                name: player.name,
+                cardCount: this.playerHands[player.name].length,
+                score: game.scores[player.name]
+            })
+        }
+        for (let player of game.players) {
+            let excludingPlayer =
+                globalOppRD.filter(x => x.name !== player.name);
+            let roomGameInfo: RoomGameInfo = {
+                '_type': 'round_upd',
+                turn_num: this.turnCount,
+                round_num: this.roundNumber,
+                current_player: this.curPlayer.name,
+                opponents: excludingPlayer,
+                hand: this.mapToIds(this.playerHands[player.name]),
+                score: game.scores[player.name],
+                scoreboard: game.roundData,
+                deck_size: this.deck.length,
+                pile: this.mapToIds(this.pile)
+            };
+            if (player.isHost) {
+                gameData.set(roomGameInfo)
+            } else {
+                await (player as UserMgr).send(roomGameInfo)
+            }
+        }
+    }
+
+    async play() {
+
+    }
+}
+
+let game: GameData;
+
+export async function startGame() {
+    roomState = RoomState.Game;
+    game = new GameData();
+
+    await game.startNewRound();
+    updateUIForRoom();
+}

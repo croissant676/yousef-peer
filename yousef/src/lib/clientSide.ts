@@ -1,17 +1,19 @@
-import type {ChatMessageData, ClientNameSetData, CommData, LobbyData, PlayerReadyData} from "./common";
+import type {ChatMessageData, ClientNameSetData, CommData, LobbyData, PlayerReadyData, RoomGameInfo} from "./common";
 import {Peer} from "peerjs";
-import {openConn, openPeer} from "./internalServer";
+import {isServer, openConn, openPeer} from "./internalServer";
 import {isCommData, raceTimeout} from "./common";
 import type {DataConnection} from "peerjs";
 import type {Writable} from "svelte/store";
 import {get, writable} from "svelte/store";
 import type {SvelteComponent} from "svelte";
+import Lobby from "./Lobby.svelte";
+import Room from "./Room.svelte";
 
 export const messages: Writable<ChatMessageData[]> = writable([]);
 export const lobbyData = writable<PlayerReadyData[]>([]);
 
 // ui
-export let component = writable<SvelteComponent>();
+export let component = writable<typeof SvelteComponent>();
 export let props = writable<object>();
 
 export function addYouTag(text: string): string {
@@ -66,6 +68,11 @@ async function waitForCommData(_type: string): Promise<CommData> {
     });
 }
 
+export let updateUIForRoom: () => void;
+export function setUpdateUIForRoom(a: () => void) {
+    updateUIForRoom = a;
+}
+
 function registerActions() {
     if (!conn) throw 'conn is undefined when register actions called!'
     conn.on('data', async (data) => {
@@ -87,6 +94,12 @@ function registerActions() {
                     let lobbyUpd = data as LobbyData;
                     lobbyData.set(lobbyUpd.data);
                     break;
+                case 'round_upd':
+                    let newGameData = data as RoomGameInfo;
+                    gameData.set(newGameData);
+                    console.log(`set new game data successfully! data = ${JSON.stringify(newGameData)}`)
+
+                    updateUIForRoom();
             }
         }
     })
@@ -99,4 +112,11 @@ export async function clientSend(data: CommData) {
     }
     conn.send(data)
     console.log(`sent data ${JSON.stringify(data)} to server successfully!`)
+}
+
+export let gameData = writable<RoomGameInfo>()
+export let deckComp: HTMLInputElement;
+
+export function setDeckComp(newDeckComp: HTMLInputElement) {
+    deckComp = newDeckComp;
 }

@@ -6,7 +6,7 @@
 
 <div id="holder">
     <span id="left">
-        <strong>{message.sender ?? 'server'}:&nbsp</strong>
+        <strong>{message.sender ?? 'game'}:&nbsp</strong>
     </span>
     <span id="right">
         {message.data}

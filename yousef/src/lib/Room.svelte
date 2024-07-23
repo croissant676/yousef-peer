@@ -2,13 +2,16 @@
 
 import CodeDisplay from "./Code.svelte";
 import Chat from "./Chat.svelte";
-import PlayerReadyScreen from "./PlayerReadyScreen.svelte";
-import ListPlayers from "./ListPlayers.svelte";
+import SelectCard from "./SelectCard.svelte";
+import DrawSelect from "./DrawSelect.svelte";
+import OpponentDisplay from "./OpponentDisplay.svelte";
 
 </script>
 <CodeDisplay/>
 <Chat/>
-
+<SelectCard/>
+<DrawSelect/>
+<OpponentDisplay/>
 
 <style>
 </style>

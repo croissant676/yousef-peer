@@ -9,6 +9,7 @@
     import {lobbyData} from "./clientSide";
 
     let showSettings = false;
+
     function changeToggle() {
         showSettings = !showSettings;
     }
@@ -19,11 +20,13 @@
 <PlayerReadyScreen/>
 <ListPlayers/>
 
-<button id="show-settings" on:click={changeToggle}>
-    settings
-</button>
-{#if isServer && showSettings}
-    <Settings/>
+{#if isServer}
+    <button id="show-settings" on:click={changeToggle}>
+        settings
+    </button>
+    {#if showSettings}
+        <Settings/>
+    {/if}
 {/if}
 
 <style>

@@ -1,9 +1,11 @@
 <script lang="ts">
     import PlayerReady from "./PlayerReady.svelte";
-    import {lobbyData} from "./clientSide";
+    import {component, lobbyData, setUpdateUIForRoom} from "./clientSide";
     import {colorFor} from "./common";
     import {changeLobbyReadyState} from "./clientMappings";
-    import {everybodyReady, isServer} from "./internalServer";
+    import {everybodyReady, isServer, startGame} from "./internalServer";
+    import Lobby from "./Lobby.svelte";
+    import Room from "./Room.svelte";
 
     let isReady = false;
     $: color = colorFor(!isReady);
@@ -17,11 +19,14 @@
         isReady = !isReady;
     }
 
+    setUpdateUIForRoom(() => {
+        $component = Room;
+    })
 
-    $: isEverybodyReady = [everybodyReady(), $lobbyData][0];
+    $: isEverybodyReady = $lobbyData.length > 1 && [everybodyReady(), $lobbyData][0];
     async function start() {
-        console.log('starting game, first updating internal server then ui..')
-
+        console.log('starting game; change host(this) ui')
+        await startGame();
     }
 
 </script>

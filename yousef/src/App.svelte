@@ -1,10 +1,7 @@
-<script context="module">
 
-</script>
 
 <script lang="ts">
     import Title from "./lib/Title.svelte";
-    import type {SvelteComponent} from "svelte";
     import NameScreen from "./lib/NameScreen.svelte";
     import Lobby from "./lib/Lobby.svelte";
     import {component, props} from "./lib/clientSide";
