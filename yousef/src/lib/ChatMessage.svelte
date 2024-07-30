@@ -9,7 +9,11 @@
         <strong>{message.sender ?? 'game'}:&nbsp</strong>
     </span>
     <span id="right">
-        {message.data}
+        {#if !message.sender}
+            <strong>{message.data}</strong>
+        {:else}
+            {message.data}
+        {/if}
     </span>
 </div>
 

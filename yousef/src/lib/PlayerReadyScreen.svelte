@@ -4,7 +4,6 @@
     import {colorFor} from "./common";
     import {changeLobbyReadyState} from "./clientMappings";
     import {everybodyReady, isServer, startGame} from "./internalServer";
-    import Lobby from "./Lobby.svelte";
     import Room from "./Room.svelte";
 
     let isReady = false;
@@ -23,7 +22,7 @@
         $component = Room;
     })
 
-    $: isEverybodyReady = $lobbyData.length > 1 && [everybodyReady(), $lobbyData][0];
+    $: isEverybodyReady = [everybodyReady(), $lobbyData][0]; //  && $lobbyData.length > 1
     async function start() {
         console.log('starting game; change host(this) ui')
         await startGame();
@@ -37,7 +36,7 @@
             <PlayerReady playerReady={playerReady}/>
         {/each}
     </div>
-    <button id="change-button" on:click={click} style="color:{color}" disabled={disableButton}>
+    <button disabled={disableButton} id="change-button" on:click={click} style="color:{color}">
         {isReady ? 'cancel' : 'ready!'}
     </button>
 

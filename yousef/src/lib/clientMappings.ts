@@ -1,6 +1,6 @@
-import {changeHostLobbyState, id, initHostLobbyData, isServer, sendChatMsg} from "./internalServer";
-import {attemptSetName, clientSend, conn, messages} from "./clientSide";
-import type {ChatMessageData, ClientMessageData, ClientNameSetData, CommData} from "./common";
+import {changeHostLobbyState, currentResolve, id, initHostLobbyData, isServer, sendChatMsg} from "./internalServer";
+import {attemptSetName, clientSend, conn, isTimeForDraw, justDrew} from "./clientSide";
+import type {CardSelect, ChatMessageData, ClientMessageData, DrawSelect} from "./common";
 import {hostName, initHostname} from "./host";
 
 export async function setName(name: string): Promise<boolean> {
@@ -37,4 +37,27 @@ export async function changeLobbyReadyState() {
     } else {
         await clientSend({'_type': 'lobby_rd'});
     }
+}
+
+export async function sendCards(handIndices: number[]) {
+    if (isServer) {
+        currentResolve(handIndices);
+    } else {
+        await clientSend({'_type': 'card_select', hands: handIndices} as CardSelect)
+    }
+}
+
+export async function call() {
+    await sendCards([]); // empty means they are calling.
+    isTimeForDraw.set(true);
+}
+
+export async function selectDrawLoc(isDeck: boolean) {
+    if (isServer) {
+        currentResolve(isDeck);
+    } else {
+        await clientSend({'_type': 'draw_select', 'value': isDeck ? 'deck' : 'pile'} as DrawSelect)
+    }
+    isTimeForDraw.set(false);
+    justDrew.set(true);
 }

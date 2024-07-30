@@ -1,6 +1,6 @@
 <script lang="ts">
     import {colorFor, type PlayerReadyData} from "./common";
-    import {addYouTag, clientName} from "./clientSide";
+    import {addYouTag} from "./clientSide";
 
     export let playerReady: PlayerReadyData;
     $: displayText = addYouTag(playerReady.name);

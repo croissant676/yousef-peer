@@ -131,7 +131,6 @@ export function isValidSelection(
         }
     }
 
-    console.log(cards)
     cards.splice(0, jokerCount);
     if (cards[cards.length - 1].rankValue - cards[0].rankValue <= 1 && jokerCount == 0)
         return false; // only 2 cards, etc
@@ -187,4 +186,35 @@ export type CardSelect = {
 export type DrawSelect = {
     '_type': 'draw_select',
     'value': 'deck' | 'pile'
+}
+
+export type SettingsUpd = {
+    _type: 'sett_upd',
+    settings: Settings
+}
+
+export type TurnUpd = {
+    _type: 'turn_upd',
+    player_turn: string
+}
+
+export const DrawFinishedRes = {_type: 'draw_finished'}
+
+export type CalledUpd = {
+    _type: 'call_alert'
+    caller: string,
+    caller_cards: number[],
+    beat?: string,
+    otherPlayers: NonCallingPlayer[]
+}
+
+export type NonCallingPlayer = {
+    name: string,
+    cards: number[]
+}
+
+export type CallingDisplay = {
+    name: string,
+    isCaller: boolean,
+    cards: number[]
 }

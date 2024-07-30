@@ -1,23 +1,19 @@
 <script lang="ts">
-    import {allCards, type Card} from "./common";
-    import {onMount} from "svelte";
-    import {component, setDeckComp} from "./clientSide";
+    import {allCards} from "./common";
+    import {gameData, isTimeForDraw} from "./clientSide";
+    import {selectDrawLoc} from "./clientMappings";
 
-    export let pile: Card[] = [allCards[2]];
-    export let deckSize = 5;
-
-    onMount(() => {
-        setDeckComp(document.getElementById('deck_comp') as HTMLInputElement);
-    });
+    $: pile = $gameData.pile.map((p) => allCards[p]);
+    $: deckSize = $gameData.deck_size;
 </script>
 
 <div id="a">
-    <button class="v">
-        <input type="image" src={pile[pile.length - 1].url} alt="pile"/>
+    <button class="v" disabled={!$isTimeForDraw} on:click={async () => await selectDrawLoc(false)}>
+        <input alt="pile" src={pile[pile.length - 1].url} type="image"/>
         <p> # pile: {pile.length} </p>
     </button>
-    <button class="v">
-        <input type="image" src="https://www.deckofcardsapi.com/static/img/back.png " alt="deck" id="deck_comp"/>
+    <button class="v" disabled={!$isTimeForDraw} on:click={async () => await selectDrawLoc(true)}>
+        <input alt="deck" id="deck_comp" src="https://www.deckofcardsapi.com/static/img/back.png " type="image"/>
 
         <p> # deck: {deckSize} </p>
     </button>

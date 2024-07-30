@@ -4,6 +4,7 @@
     import {sendMessage} from "./clientMappings";
 
     let currentMessage: string = '';
+
     function send() {
         sendMessage(currentMessage);
         currentMessage = '';
@@ -18,8 +19,8 @@
         {/each}
     </div>
     <div id="bottom-bar">
-        <input type="text" bind:value={currentMessage}
-               placeholder="type your message" id="chat-entry" on:change={send}>
+        <input bind:value={currentMessage} id="chat-entry"
+               on:change={send} placeholder="type your message" type="text">
     </div>
 </div>
 

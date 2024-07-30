@@ -1,10 +1,14 @@
-import {bounceIn} from "svelte/easing";
-
 export let hostName: string | undefined;
+
 export function initHostname(name: string) {
     if (!hostName)
         hostName = name;
     else console.log(`attempting to initialize hostname though it alr has value; new: ${name}, existing ${hostName}`)
 }
 
-export let host = { name: hostName!, isHost: true }
+export let host = {
+    isHost: true,
+    get name(): string {
+        return hostName!
+    }
+}

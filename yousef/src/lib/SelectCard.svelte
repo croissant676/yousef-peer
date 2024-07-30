@@ -1,11 +1,17 @@
 <script lang="ts">
     import {allCards, type Card, isValidSelection, timeoutPromise} from "./common";
-    import {roomSettings} from "./internalServer";
     import SelectableCard from "./SelectableCard.svelte";
-    import {gameData} from "./clientSide";
+    import {
+        clientName,
+        gameData,
+        isTimeForDraw,
+        justDrewToFalse,
+        setMatchClientSelectCard,
+        settings
+    } from "./clientSide";
+    import {call, sendCards} from "./clientMappings";
+    import {onMount} from "svelte";
 
-    let isTurn = true;
-    $: cards = $gameData.hand.map(cardId => allCards[cardId]);
     let selection = new Array(10).fill(false);
     let selected: Card[] = [];
 
@@ -23,30 +29,50 @@
 
     let selectableCards: SelectableCard[] = [];
 
+    $: isTurn = $gameData.current_player === clientName;
     $: sum = selected.map(card => card.value).reduce((a, b) => a + b, 0);
-    $: valid = isValidSelection(roomSettings, selected);
+    $: valid = isValidSelection($settings, selected);
     $: buttonText = isTurn ? valid ? "\xa0\xa0\xa0submit!\xa0\xa0\xa0" : "invalid combo" : "not your turn"
 
     async function submit() {
-        let newHand = []; // this new deck is only until the actual server response comes so its legit only milliseconds
+        let removedIndices: number[] = [];
         for (let i = 0; i < selectableCards.length; i++) {
             if (selection[i]) {
                 selectableCards[i].backToDeck();
-            } else {
-                newHand.push(cards[i]);
+                removedIndices.push(i);
             }
             selection[i] = false;
             await timeoutPromise(200);
         }
-        cards = newHand;
         selected = [];
+        await sendCards(removedIndices);
+
+        $isTimeForDraw = true;
     }
 
-    async function initialDisplay() {
+    let first = true;
+
+    export async function initialDisplay() {
+        await timeoutPromise(1000);
         for (let i = 0; i < selectableCards.length; i++) {
             selectableCards[i].flip();
             await timeoutPromise(200);
         }
+        // for future refs, first = false;
+        first = false;
+    }
+
+    gameData.subscribe((x) => console.log(x))
+    $: cards = $gameData.hand.map(cardId => allCards[cardId]);
+
+    onMount(initialDisplay)
+    $: ableToCall = $gameData.round_num > $settings.roundsBeforeCall;
+    setMatchClientSelectCard(() => {
+        console.log(`client: new hands = ${JSON.stringify(cards)}`)
+    });
+
+    function reset() {
+        first = true;
     }
 </script>
 
@@ -54,21 +80,28 @@
 <div id="nox">
     your hand
     <div>
-        <div id="card-holder">
-            {#each cards as card, index}
-                <SelectableCard data={card} onchange={onChange(index)} bind:this={selectableCards[index]}/>
-            {/each}
-            {#if cards.length === 0}
-                <p id="empty">waurw! <br> such empty</p>
-            {/if}
-        </div>
+        {#key $gameData.hand}
+            <div id="card-holder">
+                {#each cards as card, index (index)}
+                    <SelectableCard data={card} onchange={onChange(index)} bind:this={selectableCards[index]}
+                                    flipped={first}
+                                    drawn={first || index !== cards.length - 1 || !justDrewToFalse()}/>
+                {/each}
+                {#if cards.length === 0}
+                    <p id="empty">waurw! <br> such empty</p>
+                {/if}
+            </div>
+        {/key}
         <div>
             selected sum: {sum}
         </div>
         <div>
-                        <button id="submit" disabled={!valid || !isTurn} on:click={submit}>
-                            {buttonText}
-                        </button>
+            <button disabled={!valid || !isTurn || $isTimeForDraw} id="submit" on:click={submit}>
+                {buttonText}
+            </button>
+            <button disabled={!isTurn || !ableToCall || $isTimeForDraw} id="call" on:click={call}>
+                call!
+            </button>
         </div>
     </div>
 </div>
@@ -93,8 +126,12 @@
         transition: 3s;
     }
 
-    button {
+    #submit {
         background-color: #f36161;
+    }
+
+    #call {
+        background-color: #ceb864;
     }
 
     #empty {

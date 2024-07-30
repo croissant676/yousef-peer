@@ -1,21 +1,35 @@
 // noinspection SillyAssignmentJS
 
-import {Peer} from "peerjs";
 import type {DataConnection} from "peerjs";
-import {gameData, lobbyData, messages, updateUIForRoom} from "./clientSide";
+import {Peer} from "peerjs";
+import {
+    gameData,
+    lobbyData,
+    manageTurnUpd,
+    matchClientSelectCard,
+    messages,
+    settings,
+    updateUiToRoom,
+} from "./clientSide";
 import type {
     Card,
+    CardSelect,
     ChatMessageData,
     ClientMessageData,
     ClientNameSetData,
     CommData,
-    LobbyData, OpponentRoundData,
-    PlayerReadyData, RoomGameInfo
+    DrawSelect,
+    LobbyData,
+    OpponentRoundData,
+    PlayerReadyData,
+    RoomGameInfo,
+    SettingsUpd,
+    TurnUpd
 } from "./common";
-import {isCommData, makeDeck} from "./common";
+import {DrawFinishedRes, isCommData, makeDeck} from "./common";
 import {host, hostName} from "./host";
 import {get, writable} from "svelte/store";
-import Lobby from "./Lobby.svelte";
+import Settings from "./Settings.svelte";
 
 export let isServer: boolean = false;
 let peer: Peer | undefined;
@@ -40,7 +54,9 @@ export async function createInternalServer() {
         console.log('created userMgr for new connection, successful; verified')
     });
 
-    console.log(`internal server created; connected to peer server! id = ${id}`)
+    console.log(`internal server created; connected to peer server! id = ${id}`);
+    settings.set(get(roomSettings));
+    subscribeSettings();
 }
 
 export async function openPeer(peer: Peer): Promise<string> {
@@ -99,10 +115,7 @@ class UserMgr {
     conn: DataConnection;
     curState: UserState = UserState.NA;
     name: string | undefined;
-
-    get isHost() {
-        return false;
-    }
+    resolveFunctions: { [_type: string]: (data: CommData) => void } = {};
 
     constructor(conn: DataConnection) {
         this.conn = conn;
@@ -138,6 +151,7 @@ class UserMgr {
                         await this.send({'_type': 'good_name'})
                         this.name = name;
                         lobbyState[name] = false;
+                        await this.send({'_type': 'sett_upd', settings: get(roomSettings)} as CommData);
                         await lobbyDataUpdate();
                     }
                     break;
@@ -147,11 +161,22 @@ class UserMgr {
                     await lobbyDataUpdate();
                     break;
                 case 'card_select':
-
+                    this.resolveFunctions['card_select'](commData);
                     break;
                 case 'draw_select':
+                    this.resolveFunctions['draw_select'](commData);
                     break;
             }
+        });
+    }
+
+    get isHost() {
+        return false;
+    }
+
+    async waitForCommData(_type: string): Promise<CommData> {
+        return new Promise<CommData>(resolve => {
+            this.resolveFunctions[_type] = resolve;
         });
     }
 
@@ -175,7 +200,7 @@ export async function sendChatMsg(chatMsgData: ChatMessageData) {
 }
 
 export async function sendGameMsg(info: string) {
-    return sendChatMsg({ '_type': 'in_msg', sender: undefined, data: info })
+    return sendChatMsg({'_type': 'in_msg', sender: undefined, data: info})
 }
 
 export async function lobbyDataUpdate() {
@@ -221,10 +246,11 @@ export type Settings = {
     deckCount: number,
     cardsPerPlayer: number,
     ptsToLose: number,
-    punishForIncorrectCall: number
+    punishForIncorrectCall: number,
+    roundsBeforeCall: number,
 }
 
-export let roomSettings: Settings = defaultSettings();
+export let roomSettings = writable(defaultSettings());
 
 function defaultSettings(): Settings {
     return {
@@ -234,8 +260,19 @@ function defaultSettings(): Settings {
         deckCount: 1,
         cardsPerPlayer: 4,
         ptsToLose: 100,
-        punishForIncorrectCall: 30
+        punishForIncorrectCall: 30,
+        roundsBeforeCall: 3
     };
+}
+
+function subscribeSettings() {
+    roomSettings.subscribe(async (nV) => {
+        settings.set(nV);
+        await sendToAllOthers({
+            _type: 'sett_upd',
+            settings: nV
+        } as SettingsUpd);
+    })
 }
 
 export type ScoreTracker = { [username: string]: number };
@@ -249,14 +286,14 @@ class GameData {
     prevWinner: number = 0;
 
     constructor() {
-        this.settings = roomSettings;
+        this.settings = get(roomSettings);
         this.roundData = [];
         this.players = [host, ...otherUsers as User];
         this.scores = {};
         for (let player of this.players) {
             this.scores[player.name] = 0;
         }
-        console.log(`created game! data: ${this.settings}`);
+        console.log(`created game! data: ${JSON.stringify(this.settings)}`);
     }
 
     async startNewRound() {
@@ -271,10 +308,6 @@ class Round {
     turnCount: number;
     playerHands: { [username: string]: Card[] }
 
-    get roundNumber(): number {
-        return Math.floor(this.turnCount / game.players.length) + 1;
-    }
-
     constructor() {
         this.deck = makeDeck(game.settings.deckCount, game.settings.useJokers);
         this.pile = [];
@@ -285,12 +318,22 @@ class Round {
         }
     }
 
+    get roundNumber(): number {
+        return Math.floor(this.turnCount / game.players.length) + 1;
+    }
+
+    get curPlayer(): User {
+        // ensure that we fit inside the list
+        return game.players[(this.turnCount + game.prevWinner) % game.players.length];
+    }
+
     async start() {
         for (let i = 0; i < game.settings.cardsPerPlayer; i++) {
             for (let playerHandsKey in this.playerHands) {
                 this.playerHands[playerHandsKey].push(this.drawFromDeck());
             }
         }
+        this.pile.push(this.drawFromDeck());
         await this.sendUpdates();
         await sendGameMsg(`round ${game.roundData.length + 1} is starting!`)
     }
@@ -301,11 +344,6 @@ class Round {
             this.pile = [];
         }
         return this.deck.pop();
-    }
-
-    get curPlayer(): User {
-        // ensure that we fit inside the list
-        return game.players[(this.turnCount + game.prevWinner) % game.players.length];
     }
 
     mapToIds(cards: Array<Card>): number[] {
@@ -321,9 +359,13 @@ class Round {
                 score: game.scores[player.name]
             })
         }
-        for (let player of game.players) {
-            let excludingPlayer =
-                globalOppRD.filter(x => x.name !== player.name);
+        for (let i = 0; i < game.players.length; i++) {
+            let player = game.players[i];
+            let excludingPlayer = [];
+            for (let j = 1; j < game.players.length; j++) {
+                excludingPlayer.push(globalOppRD[(i + j) % game.players.length]);
+            }
+
             let roomGameInfo: RoomGameInfo = {
                 '_type': 'round_upd',
                 turn_num: this.turnCount,
@@ -345,16 +387,125 @@ class Round {
     }
 
     async play() {
+        while (!await this.playCurUser()) {
+            this.turnCount++;
+        }
+        const caller = this.curPlayer;
+        console.log(`called, caller = ${caller.name}`)
 
+        let handSums = {};
+        for (let playerHandsKey in this.playerHands) {
+            handSums[playerHandsKey] = this.calcScore(playerHandsKey);
+        }
+
+        let scoreToBeat: number = handSums[caller.name];
+        let sorted = game.players.map(x => x.name)
+            .sort((a, b) => handSums[a] - handSums[b]);
+
+
+    }
+
+    calcScore(name: string): number {
+        let cards = this.playerHands[name];
+        return cards.map(x => x.value).reduce((a, b) => a + b, 0);
+    }
+
+    async playCurUser(): Promise<boolean> {
+        let curPlayer = this.curPlayer;
+
+        console.log(`new turn; cur player = ${curPlayer.name}`)
+        let newTurnUpd = {_type: 'turn_upd', player_turn: curPlayer.name} as TurnUpd;
+        manageTurnUpd(newTurnUpd);
+        await sendToAllOthers(newTurnUpd)
+        await this.sendUpdates();
+
+        let cardIndices: number[];
+        if (curPlayer.isHost) {
+            cardIndices = await new Promise((res, _) => {
+                currentResolve = res;
+            }) as number[];
+        } else {
+            cardIndices = (await (curPlayer as UserMgr).waitForCommData('card_select') as CardSelect).hands;
+        }
+
+        if (cardIndices.length === 0) {
+            return true;
+        }
+
+        let discarded = this.discardCards(cardIndices);
+        console.log(`discarded cards from current player ${this.mapToIds(discarded)}`)
+
+        let tipMsg = {
+            _type: 'in_msg',
+            sender: undefined,
+            data: `choose where you want to draw a card from (pile or deck)`
+        } as ChatMessageData;
+
+        let isDeck: boolean;
+        if (curPlayer.isHost) {
+            messages.set([...get(messages), tipMsg]);
+
+            isDeck = await new Promise((res, _) => {
+                currentResolve = res;
+            }) as boolean;
+        } else {
+            let usrMgr = curPlayer as UserMgr;
+            await usrMgr.send(tipMsg);
+            let drawSelect = await usrMgr.waitForCommData('draw_select') as DrawSelect;
+
+            isDeck = drawSelect.value === 'deck';
+        }
+
+        if (isDeck) {
+            let card = this.drawFromDeck();
+            this.playerHands[curPlayer.name].push(card);
+        } else {
+            let card = this.pile.pop();
+            this.playerHands[curPlayer.name].push(card);
+        }
+
+        this.pile.push(...discarded);
+
+        console.log(`player selected ${isDeck ? 'deck' : 'pile'}, pushed cards to player hand, new hand = ${this.mapToIds(this.playerHands[curPlayer.name])}`)
+        await this.sendUpdates();
+
+        if (curPlayer.isHost) {
+            matchClientSelectCard();
+        } else {
+            await (this.curPlayer as UserMgr).send(DrawFinishedRes);
+        }
+        return false;
+    }
+
+    discardCards(indices: number[]): Card[] {
+        let playerCards = this.playerHands[this.curPlayer.name];
+        let newHand = [];
+        let discarded = [];
+        for (let i = 0; i < playerCards.length; i++) {
+            if (indices.indexOf(i) == -1) {
+                // indices doesn't contain it, we keep
+                newHand.push(playerCards[i]);
+            } else {
+                discarded.push(playerCards[i]);
+            }
+        }
+        console.log(`discarding cards from player ${this.curPlayer.name}; 
+                old hand: ${this.mapToIds(playerCards)}, new hand: ${this.mapToIds(newHand)}, removal indices:${indices}`)
+        this.playerHands[this.curPlayer.name] = newHand;
+        return discarded;
     }
 }
 
 let game: GameData;
+export let currentResolve: (a: any) => void;
 
 export async function startGame() {
     roomState = RoomState.Game;
     game = new GameData();
 
     await game.startNewRound();
-    updateUIForRoom();
+    updateUiToRoom();
+    await sendToAllOthers({'_type': 'game_start'});
+
+    await game.round?.play()
 }

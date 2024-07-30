@@ -4,9 +4,9 @@
     import Chat from "./Chat.svelte";
     import PlayerReadyScreen from "./PlayerReadyScreen.svelte";
     import ListPlayers from "./ListPlayers.svelte";
-    import {everybodyReady, isServer} from "./internalServer";
+    import {isServer} from "./internalServer";
     import Settings from "./Settings.svelte";
-    import {lobbyData} from "./clientSide";
+    import SettingsClient from "./SettingsClient.svelte";
 
     let showSettings = false;
 
@@ -26,6 +26,13 @@
     </button>
     {#if showSettings}
         <Settings/>
+    {/if}
+{:else }
+    <button id="show-settings" on:click={changeToggle}>
+        settings
+    </button>
+    {#if showSettings}
+        <SettingsClient/>
     {/if}
 {/if}
 

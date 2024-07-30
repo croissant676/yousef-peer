@@ -1,13 +1,22 @@
-import type {ChatMessageData, ClientNameSetData, CommData, LobbyData, PlayerReadyData, RoomGameInfo} from "./common";
-import {Peer} from "peerjs";
-import {isServer, openConn, openPeer} from "./internalServer";
+import type {
+    CalledUpd,
+    ChatMessageData,
+    ClientNameSetData,
+    CommData,
+    LobbyData,
+    PlayerReadyData,
+    RoomGameInfo,
+    SettingsUpd,
+    TurnUpd
+} from "./common";
 import {isCommData, raceTimeout} from "./common";
 import type {DataConnection} from "peerjs";
+import {Peer} from "peerjs";
+import type {Settings} from "./internalServer";
+import {openConn, openPeer} from "./internalServer";
 import type {Writable} from "svelte/store";
 import {get, writable} from "svelte/store";
 import type {SvelteComponent} from "svelte";
-import Lobby from "./Lobby.svelte";
-import Room from "./Room.svelte";
 
 export const messages: Writable<ChatMessageData[]> = writable([]);
 export const lobbyData = writable<PlayerReadyData[]>([]);
@@ -26,6 +35,7 @@ let peer: Peer | undefined = undefined;
 export let conn: DataConnection | undefined;
 
 export let clientName: string;
+
 export function setClientName(name: string) {
     clientName = name;
 }
@@ -68,9 +78,10 @@ async function waitForCommData(_type: string): Promise<CommData> {
     });
 }
 
-export let updateUIForRoom: () => void;
+export let updateUiToRoom: () => void;
+
 export function setUpdateUIForRoom(a: () => void) {
-    updateUIForRoom = a;
+    updateUiToRoom = a;
 }
 
 function registerActions() {
@@ -94,15 +105,37 @@ function registerActions() {
                     let lobbyUpd = data as LobbyData;
                     lobbyData.set(lobbyUpd.data);
                     break;
+                case 'game_start':
+                    updateUiToRoom();
+                    break;
                 case 'round_upd':
                     let newGameData = data as RoomGameInfo;
                     gameData.set(newGameData);
                     console.log(`set new game data successfully! data = ${JSON.stringify(newGameData)}`)
-
-                    updateUIForRoom();
+                    break;
+                case 'sett_upd':
+                    let settingsUpd = data as SettingsUpd;
+                    settings.set(settingsUpd.settings);
+                    break;
+                case 'turn_upd':
+                    let turnUpd = data as TurnUpd;
+                    manageTurnUpd(turnUpd);
+                    break;
             }
         }
     })
+}
+
+export function manageTurnUpd(turnUpd: TurnUpd) {
+    if (clientName === turnUpd.player_turn) {
+        messages.set([...get(messages), {_type: 'in_msg', sender: undefined, data: `it's your turn.`}]);
+    } else {
+        messages.set([...get(messages), {
+            _type: 'in_msg',
+            sender: undefined,
+            data: `it's now ${turnUpd.player_turn}'s turn`
+        }]);
+    }
 }
 
 export async function clientSend(data: CommData) {
@@ -115,8 +148,35 @@ export async function clientSend(data: CommData) {
 }
 
 export let gameData = writable<RoomGameInfo>()
-export let deckComp: HTMLInputElement;
+export let settings = writable<Settings>();
 
-export function setDeckComp(newDeckComp: HTMLInputElement) {
-    deckComp = newDeckComp;
+export let isTimeForDraw = writable(false);
+export let matchClientSelectCard: () => void; // updates the ui to show the correct num of cards, as well as displaying the animation
+
+export function setMatchClientSelectCard(newMatch: () => void) {
+    matchClientSelectCard = newMatch;
+}
+
+export let callRes = writable<CalledUpd>()
+
+export let updateUiForCallRes: () => void;
+
+export function setUpdateUiForCallRes(newCallRes: () => void) {
+    updateUiForCallRes = newCallRes;
+}
+
+export let updateUiForScore: () => void;
+
+export function setUpdateUiForScore(newScore: () => void) {
+    updateUiForScore = newScore;
+}
+
+export const justDrew = writable(false);
+
+export function justDrewToFalse(): boolean {
+    if (get(justDrew)) {
+        justDrew.set(false);
+        return true;
+    }
+    return false;
 }

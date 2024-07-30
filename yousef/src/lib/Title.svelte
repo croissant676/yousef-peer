@@ -31,12 +31,11 @@
 <h1 id="title">yousef</h1>
 <h4>enter a code or create a game</h4>
 
-<input type="text" bind:value={code} placeholder="enter a code" maxlength="36"
-on:change={click}>
+<input bind:value={code} maxlength="36" on:change={click} placeholder="enter a code"
+       type="text">
 <button disabled={disable} on:click={click}>
     {disable ? 'loading..' : isJoining ? 'join room' : 'create room'}
 </button>
-
 {#if error}
     <div style="margin-top: .5em">
         <strong>{error}</strong>

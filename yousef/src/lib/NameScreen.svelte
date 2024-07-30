@@ -1,7 +1,7 @@
 <script lang="ts">
     import CodeDisplay from "./Code.svelte";
     import {setName} from "./clientMappings";
-    import {clientName, setClientName} from "./clientSide";
+    import {setClientName} from "./clientSide";
 
     let name: string = '';
     let disable: boolean = false;
@@ -10,6 +10,7 @@
 
     $: notAllowed = disable || !name
     let error: string | undefined = undefined;
+
     async function click() {
         if (notAllowed)
             return;
@@ -33,8 +34,8 @@
 <h3>my name is...</h3>
 
 <CodeDisplay/>
-<input type="text" bind:value={name} placeholder="enter your name" maxlength="36"
-on:change={click}>
+<input bind:value={name} maxlength="36" on:change={click} placeholder="enter your name"
+       type="text">
 <button disabled={notAllowed} on:click={click}>
     {disable ? 'loading' : 'submit!'}
 </button>
