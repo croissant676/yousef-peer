@@ -10,7 +10,8 @@ export interface RankData {
     urlChar: string
 }
 
-const Ranks: Record<Rank, RankData> = (function () {
+// mapping record to get the rank data for a given rank.
+export const Ranks: Record<Rank, RankData> = (function () {
     const data = {};
     for (let i = 0; i < ranks.length; i++) {
         data[ranks[i]] = {
@@ -23,7 +24,7 @@ const Ranks: Record<Rank, RankData> = (function () {
     return data;
 })();
 
-const suits = ["hearts", "diamonds", "clubs", "spades"]
+export const suits = ["hearts", "diamonds", "clubs", "spades"]
 export type NonJokerSuit = typeof suits[number];
 export type NonJokerCard = {
     id: number,
